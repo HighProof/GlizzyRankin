@@ -1,0 +1,389 @@
+﻿<!-- 
+  GLIZZY RANKINGS 2026
+  ---------------------------------------------------
+  CONFIG — change these two things for your setup:
+  1) SHEET_PASSWORD: the shared password everyone will use to log in.
+  2) SHEET_ID: the Google Sheet's file ID (from its URL).
+     IMPORTANT: the sheet must be shared as "Anyone with the link → Viewer"
+     for the live pull to work, since this page has no Google login of its own.
+-->
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Libre+Franklin:wght@400;600;800&display=swap');
+
+  :root {
+    --deli-red: #C1272D;
+    --mustard: #E8A93B;
+    --bun: #F3E1B5;
+    --char: #241C18;
+    --relish: #6E8B3D;
+    --paper: #FBF6EA;
+  }
+
+  * { box-sizing: border-box; }
+
+  .glz-root {
+    font-family: 'Libre Franklin', sans-serif;
+    background: var(--paper);
+    background-image:
+      repeating-linear-gradient(45deg, rgba(193,39,45,0.05) 0 12px, transparent 12px 24px);
+    color: var(--char);
+    min-height: 100%;
+    padding: 32px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .glz-title {
+    font-family: 'Alfa Slab One', serif;
+    font-size: clamp(28px, 5vw, 48px);
+    color: var(--deli-red);
+    text-shadow: 3px 3px 0 var(--mustard);
+    letter-spacing: 1px;
+    margin: 0 0 4px 0;
+    text-align: center;
+  }
+
+  .glz-subtitle {
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    color: var(--char);
+    opacity: 0.65;
+    margin-bottom: 28px;
+    text-align: center;
+  }
+
+  /* ---- login card ---- */
+  .glz-card {
+    background: var(--bun);
+    border: 3px solid var(--char);
+    border-radius: 10px;
+    padding: 28px 30px;
+    max-width: 360px;
+    width: 100%;
+    box-shadow: 6px 6px 0 var(--char);
+  }
+
+  .glz-card label {
+    display: block;
+    font-weight: 800;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 8px;
+  }
+
+  .glz-card input {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 15px;
+    border: 2px solid var(--char);
+    border-radius: 6px;
+    margin-bottom: 12px;
+    font-family: inherit;
+  }
+
+  .glz-btn {
+    width: 100%;
+    padding: 11px;
+    background: var(--deli-red);
+    color: var(--paper);
+    border: 2px solid var(--char);
+    border-radius: 6px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: transform 0.08s ease;
+  }
+  .glz-btn:hover { transform: translateY(-1px); }
+  .glz-btn:active { transform: translateY(1px); }
+  .glz-btn:focus-visible, .glz-card input:focus-visible { outline: 3px solid var(--relish); outline-offset: 2px; }
+
+  .glz-error {
+    color: var(--deli-red);
+    font-size: 13px;
+    font-weight: 600;
+    margin: -4px 0 12px 0;
+    min-height: 16px;
+  }
+
+  /* ---- board ---- */
+  .glz-board {
+    width: 100%;
+    max-width: 560px;
+  }
+
+  .glz-toprow {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 18px;
+  }
+
+  .glz-refresh {
+    background: var(--char);
+    color: var(--paper);
+    border: none;
+    border-radius: 999px;
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+  }
+  .glz-refresh:focus-visible { outline: 3px solid var(--relish); outline-offset: 2px; }
+
+  .glz-status {
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0.7;
+  }
+
+  .glz-tile {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--paper);
+    border: 2px solid var(--char);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 10px;
+  }
+
+  .glz-tile.gold {
+    background: var(--mustard);
+    box-shadow: 4px 4px 0 var(--char);
+  }
+
+  .glz-rank {
+    font-family: 'Alfa Slab One', serif;
+    font-size: 22px;
+    width: 38px;
+    text-align: center;
+    color: var(--deli-red);
+    flex-shrink: 0;
+  }
+
+  .glz-tile.gold .glz-rank { color: var(--char); }
+
+  .glz-info { flex: 1; min-width: 0; }
+
+  .glz-brand {
+    font-weight: 800;
+    font-size: 15px;
+    margin-bottom: 6px;
+  }
+
+  .glz-bar-track {
+    background: rgba(36,28,24,0.12);
+    border-radius: 999px;
+    height: 8px;
+    overflow: hidden;
+  }
+
+  .glz-bar-fill {
+    height: 100%;
+    background: var(--relish);
+    border-radius: 999px;
+  }
+
+  .glz-tile.gold .glz-bar-fill { background: var(--deli-red); }
+
+  .glz-score {
+    font-family: 'Alfa Slab One', serif;
+    font-size: 18px;
+    width: 54px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .glz-unrated {
+    font-size: 11px;
+    font-weight: 700;
+    opacity: 0.55;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .glz-footnote {
+    font-size: 11px;
+    opacity: 0.55;
+    text-align: center;
+    margin-top: 18px;
+    line-height: 1.5;
+  }
+
+  .glz-empty, .glz-loading {
+    text-align: center;
+    padding: 30px 10px;
+    font-weight: 600;
+    opacity: 0.7;
+  }
+
+  .glz-error-box {
+    background: #fdecec;
+    border: 2px solid var(--deli-red);
+    border-radius: 8px;
+    padding: 16px;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .glz-error-box strong { display: block; margin-bottom: 6px; }
+</style>
+
+<div class="glz-root" id="glz-root"></div>
+
+<script>
+(function () {
+  // ===== CONFIG — EDIT THESE =====
+  const SHEET_PASSWORD = "hawtdog"; // change to your real shared password
+  const SHEET_ID = "19Yl9MAaKys6txHjgJUDjjbcx9X3d1PgYy3qb4Om1eE0";
+  const SHEET_TAB = "Summary";
+  // ================================
+
+  const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_TAB)}`;
+
+  const root = document.getElementById('glz-root');
+  let loggedIn = false;
+
+  function parseCsvLine(line) {
+    const out = [];
+    let cur = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (inQuotes) {
+        if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+        else if (c === '"') { inQuotes = false; }
+        else { cur += c; }
+      } else {
+        if (c === '"') inQuotes = true;
+        else if (c === ',') { out.push(cur); cur = ''; }
+        else cur += c;
+      }
+    }
+    out.push(cur);
+    return out;
+  }
+
+  function parseStandings(csvText) {
+    const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
+    const rows = [];
+    for (let i = 1; i < lines.length; i++) { // skip header
+      const fields = parseCsvLine(lines[i]);
+      const rank = fields[5];
+      const brand = fields[6];
+      const score = fields[7];
+      if (!brand || brand.trim() === '') continue;
+      if (!/^\d+$/.test((rank || '').trim())) continue;
+      rows.push({
+        rank: parseInt(rank, 10),
+        brand: brand.trim(),
+        score: score && score.trim() !== '' ? parseFloat(score) : null
+      });
+    }
+    rows.sort((a, b) => a.rank - b.rank);
+    return rows;
+  }
+
+  function render(html) { root.innerHTML = html; }
+
+  function renderLogin(errorMsg) {
+    render(`
+      <div class="glz-title">🌭 Glizzy Rankings</div>
+      <div class="glz-subtitle">2026 Cumulative Standings</div>
+      <div class="glz-card">
+        <label for="glz-pw">Enter the shared password</label>
+        <input id="glz-pw" type="password" autocomplete="off" />
+        <div class="glz-error">${errorMsg || ''}</div>
+        <button class="glz-btn" id="glz-login-btn">View standings</button>
+      </div>
+    `);
+    const btn = document.getElementById('glz-login-btn');
+    const input = document.getElementById('glz-pw');
+    const tryLogin = () => {
+      if (input.value === SHEET_PASSWORD) {
+        loggedIn = true;
+        loadBoard();
+      } else {
+        renderLogin('Wrong password — try again.');
+      }
+    };
+    btn.addEventListener('click', tryLogin);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryLogin(); });
+    input.focus();
+  }
+
+  function renderBoardShell(bodyHtml, statusText) {
+    render(`
+      <div class="glz-title">🌭 Glizzy Rankings</div>
+      <div class="glz-subtitle">2026 Cumulative Standings</div>
+      <div class="glz-board">
+        <div class="glz-toprow">
+          <span class="glz-status">${statusText || ''}</span>
+          <button class="glz-refresh" id="glz-refresh-btn">Refresh</button>
+        </div>
+        ${bodyHtml}
+        <div class="glz-footnote">Pulled live from the team's Google Sheet.<br/>Cumulative score = average of everyone's ratings per brand.</div>
+      </div>
+    `);
+    const refreshBtn = document.getElementById('glz-refresh-btn');
+    if (refreshBtn) refreshBtn.addEventListener('click', loadBoard);
+  }
+
+  function tilesHtml(rows) {
+    if (rows.length === 0) {
+      return `<div class="glz-empty">No brands on the board yet.</div>`;
+    }
+    const maxScore = Math.max(1, ...rows.map(r => r.score || 0));
+    return rows.map((r, idx) => {
+      const isGold = idx === 0 && r.score !== null;
+      const pct = r.score !== null ? Math.max(4, (r.score / maxScore) * 100) : 0;
+      const scoreDisplay = r.score !== null
+        ? `<div class="glz-score">${r.score.toFixed(2)}</div>`
+        : `<div class="glz-unrated">Unrated</div>`;
+      return `
+        <div class="glz-tile ${isGold ? 'gold' : ''}">
+          <div class="glz-rank">${r.rank}</div>
+          <div class="glz-info">
+            <div class="glz-brand">${r.brand}</div>
+            <div class="glz-bar-track"><div class="glz-bar-fill" style="width:${pct}%"></div></div>
+          </div>
+          ${scoreDisplay}
+        </div>
+      `;
+    }).join('');
+  }
+
+  async function loadBoard() {
+    renderBoardShell(`<div class="glz-loading">Loading current standings…</div>`, 'Loading…');
+    try {
+      const res = await fetch(CSV_URL);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const text = await res.text();
+      if (text.trim().startsWith('<')) {
+        // Google returns an HTML login/error page instead of CSV when access fails
+        throw new Error('NOT_SHARED');
+      }
+      const rows = parseStandings(text);
+      const now = new Date();
+      renderBoardShell(tilesHtml(rows), 'Updated ' + now.toLocaleTimeString());
+    } catch (err) {
+      const msg = err && err.message === 'NOT_SHARED'
+        ? `<div class="glz-error-box"><strong>Can't reach the sheet.</strong>
+           This page pulls data straight from your browser, with no Google login of its own.
+           Make sure the Google Sheet is shared as "Anyone with the link → Viewer", then hit Refresh.</div>`
+        : `<div class="glz-error-box"><strong>Something went wrong loading the standings.</strong>
+           ${err && err.message ? err.message : 'Unknown error'}. Try Refresh, or check that the sheet link sharing is set to "Anyone with the link".</div>`;
+      renderBoardShell(msg, 'Load failed');
+    }
+  }
+
+  renderLogin();
+})();
+</script>
