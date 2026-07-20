@@ -291,9 +291,9 @@
     const rows = [];
     for (let i = 1; i < lines.length; i++) { // skip header
       const fields = parseCsvLine(lines[i]);
-      const rank = fields[5];
-      const brand = fields[6];
-      const score = fields[7];
+      const rank = fields[6];
+      const brand = fields[7];
+      const score = fields[8];
       if (!brand || brand.trim() === '') continue;
       if (!/^\d+$/.test((rank || '').trim())) continue;
       rows.push({
