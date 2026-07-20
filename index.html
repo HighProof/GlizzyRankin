@@ -254,11 +254,46 @@
   const SHEET_PASSWORD_HASH = "0951d8f373f8ff967f57bee489a4c3450da1b2c7cb103701e2f91b199f0dcbbe";
   const SHEET_ID = "19Yl9MAaKys6txHjgJUDjjbcx9X3d1PgYy3qb4Om1eE0";
   const SHEET_TAB = "Summary";
+  const SESSION_KEY = "glz_session_expires_at";
+  const SESSION_DURATION_MS = 20 * 60 * 1000; // 20 minutes
   // ================================
+
+  let logoutTimer = null;
 
   async function hashPassword(text) {
     const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
     return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  // Session lives in sessionStorage (cleared when the tab/browser closes)
+  // and expires 20 min after login, even if the tab stays open the whole time.
+  function startSession() {
+    const expiresAt = Date.now() + SESSION_DURATION_MS;
+    try { sessionStorage.setItem(SESSION_KEY, String(expiresAt)); } catch (e) { /* storage unavailable, session just won't persist across refresh */ }
+    scheduleAutoLogout(expiresAt);
+  }
+
+  function hasValidSession() {
+    let expiresAt;
+    try { expiresAt = parseInt(sessionStorage.getItem(SESSION_KEY), 10); } catch (e) { return false; }
+    if (!expiresAt || isNaN(expiresAt) || Date.now() >= expiresAt) return false;
+    scheduleAutoLogout(expiresAt);
+    return true;
+  }
+
+  function clearSession() {
+    try { sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
+    if (logoutTimer) { clearTimeout(logoutTimer); logoutTimer = null; }
+  }
+
+  function scheduleAutoLogout(expiresAt) {
+    if (logoutTimer) clearTimeout(logoutTimer);
+    const msLeft = expiresAt - Date.now();
+    logoutTimer = setTimeout(() => {
+      loggedIn = false;
+      clearSession();
+      renderLogin('Your session timed out — please log in again.');
+    }, Math.max(0, msLeft));
   }
 
   const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_TAB)}`;
@@ -325,6 +360,7 @@
       const inputHash = await hashPassword(input.value);
       if (inputHash === SHEET_PASSWORD_HASH) {
         loggedIn = true;
+        startSession();
         loadBoard();
       } else {
         renderLogin('Wrong password — try again.');
@@ -342,14 +378,23 @@
       <div class="glz-board">
         <div class="glz-toprow">
           <span class="glz-status">${statusText || ''}</span>
-          <button class="glz-refresh" id="glz-refresh-btn">Refresh</button>
+          <span>
+            <button class="glz-refresh" id="glz-refresh-btn">Refresh</button>
+            <button class="glz-refresh" id="glz-logout-btn" style="background:transparent;color:var(--char);border:2px solid var(--char);margin-left:6px;">Log out</button>
+          </span>
         </div>
         ${bodyHtml}
-        <div class="glz-footnote">Pulled live from the team's Google Sheet.<br/>Cumulative score = average of everyone's ratings per brand.</div>
+        <div class="glz-footnote">Pulled live from the team's Google Sheet.<br/>Cumulative score = average of everyone's ratings per brand.<br/>You'll stay logged in for 20 minutes of inactivity.</div>
       </div>
     `);
     const refreshBtn = document.getElementById('glz-refresh-btn');
     if (refreshBtn) refreshBtn.addEventListener('click', loadBoard);
+    const logoutBtn = document.getElementById('glz-logout-btn');
+    if (logoutBtn) logoutBtn.addEventListener('click', () => {
+      loggedIn = false;
+      clearSession();
+      renderLogin();
+    });
   }
 
   function tilesHtml(rows) {
@@ -400,6 +445,11 @@
     }
   }
 
-  renderLogin();
+  if (hasValidSession()) {
+    loggedIn = true;
+    loadBoard();
+  } else {
+    renderLogin();
+  }
 })();
 </script>
