@@ -179,6 +179,21 @@
     margin-bottom: 6px;
   }
 
+  .glz-price {
+    font-size: 11px;
+    font-weight: 700;
+    opacity: 0.7;
+    margin-top: 6px;
+  }
+
+  .glz-location {
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0.6;
+    margin-top: 3px;
+    overflow-wrap: break-word;
+  }
+
   .glz-bar-track {
     background: rgba(36,28,24,0.12);
     border-radius: 999px;
@@ -329,12 +344,18 @@
       const rank = fields[6];
       const brand = fields[7];
       const score = fields[8];
+      const avgPrice = fields[9];
+      const bestPrice = fields[10];
+      const location = fields[11];
       if (!brand || brand.trim() === '') continue;
       if (!/^\d+$/.test((rank || '').trim())) continue;
       rows.push({
         rank: parseInt(rank, 10),
         brand: brand.trim(),
-        score: score && score.trim() !== '' ? parseFloat(score) : null
+        score: score && score.trim() !== '' ? parseFloat(score) : null,
+        avgPrice: avgPrice && avgPrice.trim() !== '' ? parseFloat(avgPrice) : null,
+        bestPrice: bestPrice && bestPrice.trim() !== '' ? parseFloat(bestPrice) : null,
+        location: location && location.trim() !== '' ? location.trim() : null
       });
     }
     rows.sort((a, b) => a.rank - b.rank);
@@ -342,6 +363,16 @@
   }
 
   function render(html) { root.innerHTML = html; }
+
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
 
   function renderLogin(errorMsg) {
     render(`
@@ -409,12 +440,21 @@
       const scoreDisplay = r.score !== null
         ? `<div class="glz-score">${r.score.toFixed(2)}</div>`
         : `<div class="glz-unrated">Unrated</div>`;
+
+      const priceParts = [];
+      if (r.avgPrice !== null) priceParts.push(`Avg $${r.avgPrice.toFixed(2)}`);
+      if (r.bestPrice !== null) priceParts.push(`Best $${r.bestPrice.toFixed(2)}`);
+      const priceLine = priceParts.length ? `<div class="glz-price">${priceParts.join(' &middot; ')}</div>` : '';
+      const locationLine = r.location ? `<div class="glz-location">📍 ${escapeHtml(r.location)}</div>` : '';
+
       return `
         <div class="glz-tile ${isGold ? 'gold' : ''}">
           <div class="glz-rank">${r.rank}</div>
           <div class="glz-info">
-            <div class="glz-brand">${r.brand}</div>
+            <div class="glz-brand">${escapeHtml(r.brand)}</div>
             <div class="glz-bar-track"><div class="glz-bar-fill" style="width:${pct}%"></div></div>
+            ${priceLine}
+            ${locationLine}
           </div>
           ${scoreDisplay}
         </div>
