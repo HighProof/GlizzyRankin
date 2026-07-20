@@ -1,4 +1,4 @@
-﻿<!-- 
+<!-- 
   GLIZZY RANKINGS 2026
   ---------------------------------------------------
   CONFIG — change these two things for your setup:
@@ -241,10 +241,25 @@
 <script>
 (function () {
   // ===== CONFIG — EDIT THESE =====
-  const SHEET_PASSWORD = "hawtdog"; // change to your real shared password
+  // Password is stored as a SHA-256 hash, not plain text, so it doesn't
+  // show up in "View Page Source." This is light obscurity, NOT real
+  // security — anyone determined could still brute-force or hash-lookup it,
+  // and the Google Sheet CSV itself is still reachable directly by URL if
+  // it's shared "Anyone with the link." Don't put sensitive data behind this.
+  //
+  // To change the password: run this in any browser console, then paste
+  // the result below as SHEET_PASSWORD_HASH:
+  //   crypto.subtle.digest("SHA-256", new TextEncoder().encode("yourNewPassword"))
+  //     .then(b => console.log(Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2,"0")).join("")))
+  const SHEET_PASSWORD_HASH = "0951d8f373f8ff967f57bee489a4c3450da1b2c7cb103701e2f91b199f0dcbbe";
   const SHEET_ID = "19Yl9MAaKys6txHjgJUDjjbcx9X3d1PgYy3qb4Om1eE0";
   const SHEET_TAB = "Summary";
   // ================================
+
+  async function hashPassword(text) {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+  }
 
   const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_TAB)}`;
 
@@ -306,8 +321,9 @@
     `);
     const btn = document.getElementById('glz-login-btn');
     const input = document.getElementById('glz-pw');
-    const tryLogin = () => {
-      if (input.value === SHEET_PASSWORD) {
+    const tryLogin = async () => {
+      const inputHash = await hashPassword(input.value);
+      if (inputHash === SHEET_PASSWORD_HASH) {
         loggedIn = true;
         loadBoard();
       } else {
