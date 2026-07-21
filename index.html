@@ -411,8 +411,8 @@
   // Paste the URL from Deploy > New deployment > Web app in the Apps
   // Script editor. Until you do, the Edit panel shows a setup message
   // instead of trying (and failing) to call it.
-  const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzXZuGbjbv7GtmQ02chUe0rjaq0S0-8JBfX20xIdoUDJmqq0vDHmSbX0pafYkZA3QLOXw/exec";
-  access-control-allow-origin: *
+  const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzh7es7-lx_HrCN4X2c7OomEojIJexjYrI1dvW7rQLuCr42edRVASgd84Tm4oDNhaXjJg/exec";
+
   // Must match your person-sheet tab names / Users-sheet nicknames exactly.
   // Not pulled live from the spreadsheet — update this list by hand if you
   // add, remove, or rename an evaluator.
@@ -746,7 +746,6 @@
             <button class="glz-modal-close" id="glz-modal-close" aria-label="Close">✕</button>
           </div>
           <label for="glz-evaluator-select">Which evaluator are you?</label>
-          <p>
           <select id="glz-evaluator-select">${options}</select>
           <button class="glz-btn" id="glz-load-ratings-btn">Load my ratings</button>
           <div id="glz-ratings-list"></div>
