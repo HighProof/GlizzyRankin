@@ -336,6 +336,20 @@
     return out;
   }
 
+  // Strips everything except digits, a decimal point, and a leading minus
+  // sign before parsing. Google's CSV export renders currency-formatted
+  // cells (number format "$"#,##0.00) as formatted text like "$10.91" or
+  // "$1,234.50" rather than a raw number, and parseFloat() on a string that
+  // starts with "$" returns NaN. This makes price parsing tolerant of that
+  // formatting either way — a plain "10.91" still parses fine.
+  function parsePriceValue(raw) {
+    if (!raw || raw.trim() === '') return null;
+    const cleaned = raw.replace(/[^0-9.\-]/g, '');
+    if (cleaned === '') return null;
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? null : num;
+  }
+
   function parseStandings(csvText) {
     const lines = csvText.split(/\r?\n/).filter(l => l.trim().length > 0);
     const rows = [];
@@ -353,8 +367,8 @@
         rank: parseInt(rank, 10),
         brand: brand.trim(),
         score: score && score.trim() !== '' ? parseFloat(score) : null,
-        avgPrice: avgPrice && avgPrice.trim() !== '' ? parseFloat(avgPrice) : null,
-        bestPrice: bestPrice && bestPrice.trim() !== '' ? parseFloat(bestPrice) : null,
+        avgPrice: parsePriceValue(avgPrice),
+        bestPrice: parsePriceValue(bestPrice),
         location: location && location.trim() !== '' ? location.trim() : null
       });
     }
