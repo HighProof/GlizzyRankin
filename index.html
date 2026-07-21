@@ -411,7 +411,7 @@
   // Paste the URL from Deploy > New deployment > Web app in the Apps
   // Script editor. Until you do, the Edit panel shows a setup message
   // instead of trying (and failing) to call it.
-  const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbydT8GfG2ufRWCUYvToFAqUQIMzAhpnP1N4Mw9eaAbwMHJsD7C-B025TrmCAEiM8ZBnCQ/exec";
+  const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzXZuGbjbv7GtmQ02chUe0rjaq0S0-8JBfX20xIdoUDJmqq0vDHmSbX0pafYkZA3QLOXw/exec";
 
   // Must match your person-sheet tab names / Users-sheet nicknames exactly.
   // Not pulled live from the spreadsheet — update this list by hand if you
@@ -674,20 +674,57 @@
     modalContainer.innerHTML = '';
   }
 
-  // Calls the Apps Script Web App via GET, with the JSON payload
-  // URL-encoded as a query parameter. This looks unusual for write
-  // actions (update/delete), but it's a deliberate workaround: Apps
-  // Script Web App responses from doPost() were found NOT to reliably
-  // include an Access-Control-Allow-Origin header (the request succeeds
-  // server-side, but the browser still blocks reading the response).
-  // doGet() responses consistently include it. GET requests also skip
-  // the CORS preflight (OPTIONS) step entirely, which Apps Script Web
-  // Apps don't handle cleanly either.
+  // Calls the Apps Script Web App via JSONP (a dynamically injected
+  // <script> tag), not fetch(). This isn't a preference — it's the fix
+  // for a hard platform limitation: Apps Script's ContentService has no
+  // way to set arbitrary response headers, so it can't be made to
+  // reliably send Access-Control-Allow-Origin, and no fetch()-based
+  // request (GET, POST, any Content-Type) can work around that. <script>
+  // tag loads aren't subject to CORS at all, which is why this works.
   //
-  // Tradeoff: this puts the password hash in the URL/query string rather
-  // than a request body, so it's visible in browser history and in Apps
-  // Script's own execution logs (still just a hash of the shared
-  // password — same trust level as today, just less hidden from view).
+  // Trust note: this executes whatever JS the Web App returns. That's
+  // fine here because it's your own deployed script (same trust level as
+  // any other code this page already runs) — it would NOT be fine to
+  // point this at a URL you don't control.
+  function callWebAppJsonp_(payloadObj) {
+    return new Promise((resolve) => {
+      const callbackName = 'glzCb_' + Math.random().toString(36).slice(2);
+      const script = document.createElement('script');
+      let settled = false;
+      let timeoutId;
+
+      const cleanup = () => {
+        delete window[callbackName];
+        if (script.parentNode) script.parentNode.removeChild(script);
+        clearTimeout(timeoutId);
+      };
+
+      window[callbackName] = (data) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(data);
+      };
+
+      timeoutId = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve({ ok: false, error: 'Request timed out.' });
+      }, 15000);
+
+      script.onerror = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve({ ok: false, error: 'Could not reach the server (script load failed).' });
+      };
+
+      script.src = WEBAPP_URL + '?payload=' + encodeURIComponent(JSON.stringify(payloadObj)) + '&callback=' + callbackName;
+      document.body.appendChild(script);
+    });
+  }
+
   async function callWebApp(action, payload) {
     if (!WEBAPP_URL || WEBAPP_URL.indexOf('PASTE_YOUR') !== -1) {
       return { ok: false, error: 'The edit panel isn\'t configured yet — set WEBAPP_URL in this file to your deployed Apps Script Web App URL.' };
@@ -695,15 +732,8 @@
     if (!sessionPasswordHash) {
       return { ok: false, error: 'Your session expired — please log out and back in.' };
     }
-    try {
-      const body = Object.assign({ action, passwordHash: sessionPasswordHash }, payload);
-      const url = WEBAPP_URL + '?payload=' + encodeURIComponent(JSON.stringify(body));
-      const res = await fetch(url, { method: 'GET' });
-      const data = await res.json();
-      return data;
-    } catch (err) {
-      return { ok: false, error: 'Could not reach the server: ' + (err && err.message ? err.message : 'unknown error') };
-    }
+    const body = Object.assign({ action, passwordHash: sessionPasswordHash }, payload);
+    return callWebAppJsonp_(body);
   }
 
   function openEvaluatorPicker() {
