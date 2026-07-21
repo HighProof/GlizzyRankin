@@ -674,16 +674,20 @@
     modalContainer.innerHTML = '';
   }
 
-  // Calls the Apps Script Web App. Sent with a text/plain Content-Type on
-  // purpose (even though the body is JSON) — this keeps the request a
-  // browser "simple request," so it skips the CORS preflight (OPTIONS)
-  // step that Apps Script Web Apps don't handle cleanly. Apps Script still
-  // reads the raw body fine via e.postData.contents and JSON.parse()s it
-  // there regardless of what Content-Type header we sent.
+  // Calls the Apps Script Web App via GET, with the JSON payload
+  // URL-encoded as a query parameter. This looks unusual for write
+  // actions (update/delete), but it's a deliberate workaround: Apps
+  // Script Web App responses from doPost() were found NOT to reliably
+  // include an Access-Control-Allow-Origin header (the request succeeds
+  // server-side, but the browser still blocks reading the response).
+  // doGet() responses consistently include it. GET requests also skip
+  // the CORS preflight (OPTIONS) step entirely, which Apps Script Web
+  // Apps don't handle cleanly either.
   //
-  // NOTE: I haven't been able to test this against a live deployment —
-  // verify a save/delete round-trip actually works once you've deployed,
-  // before relying on it.
+  // Tradeoff: this puts the password hash in the URL/query string rather
+  // than a request body, so it's visible in browser history and in Apps
+  // Script's own execution logs (still just a hash of the shared
+  // password — same trust level as today, just less hidden from view).
   async function callWebApp(action, payload) {
     if (!WEBAPP_URL || WEBAPP_URL.indexOf('PASTE_YOUR') !== -1) {
       return { ok: false, error: 'The edit panel isn\'t configured yet — set WEBAPP_URL in this file to your deployed Apps Script Web App URL.' };
@@ -692,11 +696,9 @@
       return { ok: false, error: 'Your session expired — please log out and back in.' };
     }
     try {
-      const res = await fetch(WEBAPP_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(Object.assign({ action, passwordHash: sessionPasswordHash }, payload))
-      });
+      const body = Object.assign({ action, passwordHash: sessionPasswordHash }, payload);
+      const url = WEBAPP_URL + '?payload=' + encodeURIComponent(JSON.stringify(body));
+      const res = await fetch(url, { method: 'GET' });
       const data = await res.json();
       return data;
     } catch (err) {
