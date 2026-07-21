@@ -1,11 +1,19 @@
 <!-- 
   GLIZZY RANKINGS 2026
   ---------------------------------------------------
-  CONFIG — change these two things for your setup:
-  1) SHEET_PASSWORD: the shared password everyone will use to log in.
+  CONFIG — change these for your setup:
+  1) SHEET_PASSWORD_HASH: SHA-256 hash of the shared password (see comment below).
   2) SHEET_ID: the Google Sheet's file ID (from its URL).
      IMPORTANT: the sheet must be shared as "Anyone with the link → Viewer"
      for the live pull to work, since this page has no Google login of its own.
+  3) WEBAPP_URL: the deployed Apps Script Web App URL that powers the
+     "Edit My Ratings" panel. See the comment above doPost() in the
+     Apps Script file for deployment steps. Leave the placeholder in place
+     and the Edit panel will show a "not configured yet" message instead
+     of failing silently.
+  4) EVALUATORS: the exact list of person-sheet tab names (nicknames from
+     the Users sheet). This list is NOT pulled live from the spreadsheet —
+     update it here if you add, remove, or rename an evaluator.
 -->
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Libre+Franklin:wght@400;600;800&display=swap');
@@ -75,7 +83,7 @@
     margin-bottom: 8px;
   }
 
-  .glz-card input {
+  .glz-card input, .glz-card select {
     width: 100%;
     padding: 10px 12px;
     font-size: 15px;
@@ -83,6 +91,7 @@
     border-radius: 6px;
     margin-bottom: 12px;
     font-family: inherit;
+    background: var(--paper);
   }
 
   .glz-btn {
@@ -101,7 +110,8 @@
   }
   .glz-btn:hover { transform: translateY(-1px); }
   .glz-btn:active { transform: translateY(1px); }
-  .glz-btn:focus-visible, .glz-card input:focus-visible { outline: 3px solid var(--relish); outline-offset: 2px; }
+  .glz-btn:focus-visible, .glz-card input:focus-visible, .glz-card select:focus-visible { outline: 3px solid var(--relish); outline-offset: 2px; }
+  .glz-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .glz-error {
     color: var(--deli-red);
@@ -122,6 +132,8 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 18px;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
   .glz-refresh {
@@ -249,9 +261,129 @@
     line-height: 1.6;
   }
   .glz-error-box strong { display: block; margin-bottom: 6px; }
+
+  /* ---- edit ratings modal ---- */
+  .glz-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(36,28,24,0.55);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 30px 16px;
+    overflow-y: auto;
+    z-index: 1000;
+  }
+
+  .glz-modal {
+    background: var(--paper);
+    border: 3px solid var(--char);
+    border-radius: 10px;
+    box-shadow: 6px 6px 0 var(--char);
+    max-width: 520px;
+    width: 100%;
+    padding: 24px;
+  }
+
+  .glz-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+
+  .glz-modal-title {
+    font-family: 'Alfa Slab One', serif;
+    font-size: 20px;
+    color: var(--deli-red);
+  }
+
+  .glz-modal-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    font-weight: 800;
+    cursor: pointer;
+    color: var(--char);
+    line-height: 1;
+    padding: 4px 8px;
+  }
+  .glz-modal-close:focus-visible { outline: 3px solid var(--relish); outline-offset: 2px; }
+
+  .glz-rating-card {
+    border: 2px solid var(--char);
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 14px;
+    background: var(--bun);
+  }
+
+  .glz-rating-card-title {
+    font-weight: 800;
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+
+  .glz-field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .glz-field label {
+    display: block;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.7;
+    margin-bottom: 3px;
+  }
+
+  .glz-field input {
+    width: 100%;
+    padding: 7px 8px;
+    font-size: 13px;
+    border: 2px solid var(--char);
+    border-radius: 5px;
+    font-family: inherit;
+    background: var(--paper);
+  }
+
+  .glz-card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .glz-card-actions button {
+    flex: 1;
+    padding: 8px;
+    border-radius: 6px;
+    border: 2px solid var(--char);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  .glz-save-btn { background: var(--relish); color: var(--paper); }
+  .glz-delete-btn { background: var(--paper); color: var(--deli-red); }
+
+  .glz-card-msg {
+    font-size: 11px;
+    font-weight: 700;
+    margin-top: 8px;
+    min-height: 14px;
+  }
+  .glz-card-msg.err { color: var(--deli-red); }
+  .glz-card-msg.ok { color: var(--relish); }
 </style>
 
 <div class="glz-root" id="glz-root"></div>
+<div id="glz-modal-container"></div>
 
 <script>
 (function () {
@@ -266,14 +398,29 @@
   // the result below as SHEET_PASSWORD_HASH:
   //   crypto.subtle.digest("SHA-256", new TextEncoder().encode("yourNewPassword"))
   //     .then(b => console.log(Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2,"0")).join("")))
+  // If you change this, also update WEBAPP_PASSWORD_HASH in the Apps
+  // Script file, or Edit/Delete will fail with "Wrong password" even
+  // though login here still works.
   const SHEET_PASSWORD_HASH = "0951d8f373f8ff967f57bee489a4c3450da1b2c7cb103701e2f91b199f0dcbbe";
   const SHEET_ID = "19Yl9MAaKys6txHjgJUDjjbcx9X3d1PgYy3qb4Om1eE0";
   const SHEET_TAB = "Summary";
   const SESSION_KEY = "glz_session_expires_at";
+  const SESSION_HASH_KEY = "glz_session_pw_hash";
   const SESSION_DURATION_MS = 20 * 60 * 1000; // 20 minutes
+
+  // Paste the URL from Deploy > New deployment > Web app in the Apps
+  // Script editor. Until you do, the Edit panel shows a setup message
+  // instead of trying (and failing) to call it.
+  const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwMtimH4eP2sr4sk1E4UhanyylvSp0GvtdNZUvaor1OnkrO-WY-6V9ub1ryOZfoHqSSMA/exec";
+
+  // Must match your person-sheet tab names / Users-sheet nicknames exactly.
+  // Not pulled live from the spreadsheet — update this list by hand if you
+  // add, remove, or rename an evaluator.
+  const EVALUATORS = ["Classy D", "Dr Hux", "Ben Jammin", "Boston Rob"];
   // ================================
 
   let logoutTimer = null;
+  let sessionPasswordHash = null;
 
   async function hashPassword(text) {
     const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -281,10 +428,18 @@
   }
 
   // Session lives in sessionStorage (cleared when the tab/browser closes)
-  // and expires 20 min after login, even if the tab stays open the whole time.
-  function startSession() {
+  // and expires 20 min after login, even if the tab stays open the whole
+  // time. The password hash is stored alongside it so the Edit panel can
+  // authenticate to the Web App without asking for the password a second
+  // time mid-session — it carries the same trust level as the read-only
+  // login already does, since both are just this shared hash.
+  function startSession(passwordHash) {
+    sessionPasswordHash = passwordHash;
     const expiresAt = Date.now() + SESSION_DURATION_MS;
-    try { sessionStorage.setItem(SESSION_KEY, String(expiresAt)); } catch (e) { /* storage unavailable, session just won't persist across refresh */ }
+    try {
+      sessionStorage.setItem(SESSION_KEY, String(expiresAt));
+      sessionStorage.setItem(SESSION_HASH_KEY, passwordHash);
+    } catch (e) { /* storage unavailable, session just won't persist across refresh */ }
     scheduleAutoLogout(expiresAt);
   }
 
@@ -292,12 +447,17 @@
     let expiresAt;
     try { expiresAt = parseInt(sessionStorage.getItem(SESSION_KEY), 10); } catch (e) { return false; }
     if (!expiresAt || isNaN(expiresAt) || Date.now() >= expiresAt) return false;
+    try { sessionPasswordHash = sessionStorage.getItem(SESSION_HASH_KEY) || null; } catch (e) { sessionPasswordHash = null; }
     scheduleAutoLogout(expiresAt);
     return true;
   }
 
   function clearSession() {
-    try { sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
+    sessionPasswordHash = null;
+    try {
+      sessionStorage.removeItem(SESSION_KEY);
+      sessionStorage.removeItem(SESSION_HASH_KEY);
+    } catch (e) {}
     if (logoutTimer) { clearTimeout(logoutTimer); logoutTimer = null; }
   }
 
@@ -307,6 +467,7 @@
     logoutTimer = setTimeout(() => {
       loggedIn = false;
       clearSession();
+      closeModal();
       renderLogin('Your session timed out — please log in again.');
     }, Math.max(0, msLeft));
   }
@@ -314,6 +475,7 @@
   const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_TAB)}`;
 
   const root = document.getElementById('glz-root');
+  const modalContainer = document.getElementById('glz-modal-container');
   let loggedIn = false;
 
   function parseCsvLine(line) {
@@ -341,7 +503,9 @@
   // cells (number format "$"#,##0.00) as formatted text like "$10.91" or
   // "$1,234.50" rather than a raw number, and parseFloat() on a string that
   // starts with "$" returns NaN. This makes price parsing tolerant of that
-  // formatting either way — a plain "10.91" still parses fine.
+  // formatting either way — a plain "10.91" still parses fine. The Apps
+  // Script now also sanitizes prices at the source, so this is a second
+  // layer of protection rather than the only one.
   function parsePriceValue(raw) {
     if (!raw || raw.trim() === '') return null;
     const cleaned = raw.replace(/[^0-9.\-]/g, '');
@@ -405,7 +569,7 @@
       const inputHash = await hashPassword(input.value);
       if (inputHash === SHEET_PASSWORD_HASH) {
         loggedIn = true;
-        startSession();
+        startSession(inputHash);
         loadBoard();
       } else {
         renderLogin('Wrong password — try again.');
@@ -425,6 +589,7 @@
           <span class="glz-status">${statusText || ''}</span>
           <span>
             <a class="glz-refresh" id="glz-rate-link" href="https://forms.gle/EUgfUrvWFkLpPVNM8" target="_blank" rel="noopener noreferrer" style="text-decoration:none;display:inline-block;">Rate a Glizzy</a>
+            <button class="glz-refresh" id="glz-edit-btn" style="margin-left:6px;">Edit My Ratings</button>
             <button class="glz-refresh" id="glz-refresh-btn" style="margin-left:6px;">Refresh</button>
             <button class="glz-refresh" id="glz-logout-btn" style="background:transparent;color:var(--char);border:2px solid var(--char);margin-left:6px;">Log out</button>
           </span>
@@ -439,8 +604,11 @@
     if (logoutBtn) logoutBtn.addEventListener('click', () => {
       loggedIn = false;
       clearSession();
+      closeModal();
       renderLogin();
     });
+    const editBtn = document.getElementById('glz-edit-btn');
+    if (editBtn) editBtn.addEventListener('click', openEvaluatorPicker);
   }
 
   function tilesHtml(rows) {
@@ -498,6 +666,189 @@
            ${err && err.message ? err.message : 'Unknown error'}. Try Refresh, or check that the sheet link sharing is set to "Anyone with the link".</div>`;
       renderBoardShell(msg, 'Load failed');
     }
+  }
+
+  // ===== Edit My Ratings modal =====
+
+  function closeModal() {
+    modalContainer.innerHTML = '';
+  }
+
+  // Calls the Apps Script Web App. Sent with a text/plain Content-Type on
+  // purpose (even though the body is JSON) — this keeps the request a
+  // browser "simple request," so it skips the CORS preflight (OPTIONS)
+  // step that Apps Script Web Apps don't handle cleanly. Apps Script still
+  // reads the raw body fine via e.postData.contents and JSON.parse()s it
+  // there regardless of what Content-Type header we sent.
+  //
+  // NOTE: I haven't been able to test this against a live deployment —
+  // verify a save/delete round-trip actually works once you've deployed,
+  // before relying on it.
+  async function callWebApp(action, payload) {
+    if (!WEBAPP_URL || WEBAPP_URL.indexOf('PASTE_YOUR') !== -1) {
+      return { ok: false, error: 'The edit panel isn\'t configured yet — set WEBAPP_URL in this file to your deployed Apps Script Web App URL.' };
+    }
+    if (!sessionPasswordHash) {
+      return { ok: false, error: 'Your session expired — please log out and back in.' };
+    }
+    try {
+      const res = await fetch(WEBAPP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(Object.assign({ action, passwordHash: sessionPasswordHash }, payload))
+      });
+      const data = await res.json();
+      return data;
+    } catch (err) {
+      return { ok: false, error: 'Could not reach the server: ' + (err && err.message ? err.message : 'unknown error') };
+    }
+  }
+
+  function openEvaluatorPicker() {
+    const options = EVALUATORS.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+    modalContainer.innerHTML = `
+      <div class="glz-modal-overlay" id="glz-modal-overlay">
+        <div class="glz-modal">
+          <div class="glz-modal-header">
+            <div class="glz-modal-title">Edit My Ratings</div>
+            <button class="glz-modal-close" id="glz-modal-close" aria-label="Close">✕</button>
+          </div>
+          <label for="glz-evaluator-select">Which evaluator are you?</label>
+          <select id="glz-evaluator-select">${options}</select>
+          <button class="glz-btn" id="glz-load-ratings-btn">Load my ratings</button>
+          <div id="glz-ratings-list"></div>
+        </div>
+      </div>
+    `;
+    document.getElementById('glz-modal-close').addEventListener('click', closeModal);
+    document.getElementById('glz-modal-overlay').addEventListener('click', (e) => {
+      if (e.target.id === 'glz-modal-overlay') closeModal();
+    });
+    document.getElementById('glz-load-ratings-btn').addEventListener('click', () => {
+      const evaluator = document.getElementById('glz-evaluator-select').value;
+      loadRatingsList(evaluator);
+    });
+  }
+
+  async function loadRatingsList(evaluator) {
+    const listEl = document.getElementById('glz-ratings-list');
+    listEl.innerHTML = `<div class="glz-loading">Loading ${escapeHtml(evaluator)}'s ratings…</div>`;
+    const result = await callWebApp('list', { evaluator });
+    if (!result.ok) {
+      listEl.innerHTML = `<div class="glz-error-box"><strong>Couldn't load ratings.</strong> ${escapeHtml(result.error || 'Unknown error')}</div>`;
+      return;
+    }
+    if (!result.ratings || result.ratings.length === 0) {
+      listEl.innerHTML = `<div class="glz-empty">No ratings yet for ${escapeHtml(evaluator)}.</div>`;
+      return;
+    }
+    listEl.innerHTML = result.ratings.map(r => ratingCardHtml(evaluator, r)).join('');
+    result.ratings.forEach(r => wireCardEvents(evaluator, r.row));
+  }
+
+  function parseNotesForFields(notes) {
+    // Notes are stored as "$price, location" (either half may be missing).
+    // Best-effort split back into editable fields for the form.
+    if (!notes) return { price: '', location: '' };
+    const parts = notes.split(',').map(s => s.trim());
+    let price = '';
+    let location = '';
+    parts.forEach(p => {
+      if (p.startsWith('$')) price = p.slice(1);
+      else if (p !== '') location = location ? location + ', ' + p : p;
+    });
+    return { price, location };
+  }
+
+  function ratingCardHtml(evaluator, r) {
+    const { price, location } = parseNotesForFields(r.notes);
+    const safeId = `${evaluator}-${r.row}`.replace(/[^a-zA-Z0-9\-]/g, '_');
+    return `
+      <div class="glz-rating-card" id="card-${safeId}" data-row="${r.row}">
+        <div class="glz-rating-card-title">Row ${r.row} &mdash; Rank ${r.rank !== '' ? r.rank : '—'}</div>
+        <div class="glz-field">
+          <label for="brand-${safeId}">Brand</label>
+          <input id="brand-${safeId}" type="text" value="${escapeHtml(r.brand)}" />
+        </div>
+        <div class="glz-field-row">
+          <div class="glz-field">
+            <label for="taste-${safeId}">Taste (0-10)</label>
+            <input id="taste-${safeId}" type="number" min="0" max="10" step="0.5" value="${escapeHtml(r.taste)}" />
+          </div>
+          <div class="glz-field">
+            <label for="snap-${safeId}">Snap/Texture (0-10)</label>
+            <input id="snap-${safeId}" type="number" min="0" max="10" step="0.5" value="${escapeHtml(r.snap)}" />
+          </div>
+        </div>
+        <div class="glz-field-row">
+          <div class="glz-field">
+            <label for="value-${safeId}">Value for Money (0-10)</label>
+            <input id="value-${safeId}" type="number" min="0" max="10" step="0.5" value="${escapeHtml(r.value)}" />
+          </div>
+          <div class="glz-field">
+            <label for="quality-${safeId}">Ingredient Quality (0-10)</label>
+            <input id="quality-${safeId}" type="number" min="0" max="10" step="0.5" value="${escapeHtml(r.quality)}" />
+          </div>
+        </div>
+        <div class="glz-field-row">
+          <div class="glz-field">
+            <label for="price-${safeId}">Price ($)</label>
+            <input id="price-${safeId}" type="text" value="${escapeHtml(price)}" placeholder="e.g. 8.94" />
+          </div>
+          <div class="glz-field">
+            <label for="location-${safeId}">Where to Find</label>
+            <input id="location-${safeId}" type="text" value="${escapeHtml(location)}" />
+          </div>
+        </div>
+        <div class="glz-card-actions">
+          <button class="glz-save-btn" id="save-${safeId}">Save</button>
+          <button class="glz-delete-btn" id="delete-${safeId}">Delete</button>
+        </div>
+        <div class="glz-card-msg" id="msg-${safeId}"></div>
+      </div>
+    `;
+  }
+
+  function wireCardEvents(evaluator, row) {
+    const safeId = `${evaluator}-${row}`.replace(/[^a-zA-Z0-9\-]/g, '_');
+    const msgEl = document.getElementById(`msg-${safeId}`);
+
+    document.getElementById(`save-${safeId}`).addEventListener('click', async () => {
+      const payload = {
+        row,
+        brand: document.getElementById(`brand-${safeId}`).value,
+        taste: document.getElementById(`taste-${safeId}`).value,
+        snap: document.getElementById(`snap-${safeId}`).value,
+        value: document.getElementById(`value-${safeId}`).value,
+        quality: document.getElementById(`quality-${safeId}`).value,
+        price: document.getElementById(`price-${safeId}`).value,
+        location: document.getElementById(`location-${safeId}`).value
+      };
+      msgEl.textContent = 'Saving…';
+      msgEl.className = 'glz-card-msg';
+      const result = await callWebApp('update', Object.assign({ evaluator }, payload));
+      if (result.ok) {
+        msgEl.textContent = 'Saved.';
+        msgEl.className = 'glz-card-msg ok';
+      } else {
+        msgEl.textContent = result.error || 'Save failed.';
+        msgEl.className = 'glz-card-msg err';
+      }
+    });
+
+    document.getElementById(`delete-${safeId}`).addEventListener('click', async () => {
+      const brandName = document.getElementById(`brand-${safeId}`).value;
+      if (!window.confirm(`Delete your rating for "${brandName}"? This can't be undone.`)) return;
+      msgEl.textContent = 'Deleting…';
+      msgEl.className = 'glz-card-msg';
+      const result = await callWebApp('delete', { evaluator, row });
+      if (result.ok) {
+        document.getElementById(`card-${safeId}`).remove();
+      } else {
+        msgEl.textContent = result.error || 'Delete failed.';
+        msgEl.className = 'glz-card-msg err';
+      }
+    });
   }
 
   if (hasValidSession()) {
